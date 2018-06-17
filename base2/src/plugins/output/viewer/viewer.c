@@ -46,6 +46,8 @@
 
 #include "config.h"
 #include "../../input/dummy/config.h"
+#include "../../../core/message_ipfix.h"
+//Reader.h
 
 /** Plugin description */
 IPX_API struct ipx_plugin_info ipx_plugin_info = {
@@ -104,29 +106,32 @@ ipx_plugin_destroy(ipx_ctx_t *ctx, void *cfg)
 int
 ipx_plugin_process(ipx_ctx_t *ctx, void *cfg, ipx_msg_t *msg)
 {
-    struct instance_data *data = (struct instance_data *) cfg;
+    ipx_msg_ipfix_t *ipfix_msg = ipx_msg_base2ipfix(msg);
 
-    int type = ipx_msg_get_type(msg);
-    if (type == IPX_MSG_IPFIX) {
-        // Process IPFIX message
-        ipx_msg_ipfix_t *ipfix_msg = ipx_msg_base2ipfix(msg);
-        const struct ipx_msg_ctx *ipfix_ctx = ipx_msg_ipfix_get_ctx(ipfix_msg);
-        IPX_CTX_INFO(ctx, "[ODID: %" PRIu32 "] Received an IPFIX message", ipfix_ctx->odid);
+    //read packet
+    printf("I am the header of the IPFIX packet\n");
+
+    //read record
+    const uint32_t rec_cnt = ipx_msg_ipfix_get_drec_cnt(ipfix_msg);
+    for(uint32_t i = 0; i < rec_cnt; ++i){
+
+        //print info about the record
+        printf("\t Record n.%"PRIu32" of %"PRIu32"\n",i,rec_cnt);
+
+        //get the record and read all the fields
+        struct ipx_ipfix_record *ipfix_rec = ipx_msg_ipfix_get_drec(ipfix_msg,i);
+
+        struct fds_drec_iter iter;
+        fds_drec_iter_init(&iter, &(ipfix_rec->rec), 0);
+
+        //iterate through all the fields in record
+        while (fds_drec_iter_next(&iter) != FDS_ERR_NOTFOUND) {
+            const struct fds_tfield *field = iter.field.info;
+
+            printf("\t\tEN: [%" PRIu32 "] \t\t ID: [%" PRIu16"]\t\t", field->en, field->id);
+            printf("%s : %s->\n",field->def->scope->name, field->def->name);
+        }
     }
-
-    if (type == IPX_MSG_SESSION) {
-        // Process Transport Session Event
-        ipx_msg_session_t *session_msg = ipx_msg_base2session(msg);
-        enum ipx_msg_session_event event = ipx_msg_session_get_event(session_msg);
-        const struct ipx_session *session = ipx_msg_session_get_session(session_msg);
-        const char *status_msg = (event == IPX_MSG_SESSION_OPEN) ? "opened" : "closed";
-        IPX_CTX_INFO(ctx, "Transport Session '%s' %s", session->ident, status_msg);
-    }
-
-    const struct timespec *delay = &data->config->sleep_time;
-    if (delay->tv_sec != 0 || delay->tv_nsec != 0) {
-        nanosleep(delay, NULL);
-    }
-
     return IPX_OK;
+
 }

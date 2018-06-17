@@ -1,8 +1,11 @@
 # Create a linkable module
+
 add_library(viewer-output MODULE
-	viewer.c
-	config.c
-	config.h
+		viewer.c
+		config.c
+		config.h
+		#Reader.h
+		#Reader.c
 )
 
 install(
