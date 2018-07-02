@@ -47,7 +47,7 @@
 #include "config.h"
 #include "../../input/dummy/config.h"
 #include "../../../core/message_ipfix.h"
-//Reader.h
+#include "Reader.h"
 
 /** Plugin description */
 IPX_API struct ipx_plugin_info ipx_plugin_info = {
@@ -112,40 +112,8 @@ ipx_plugin_process(ipx_ctx_t *ctx, void *cfg, ipx_msg_t *msg)
     }
 
     ipx_msg_ipfix_t *ipfix_msg = ipx_msg_base2ipfix(msg);
+    read_packet(ipfix_msg);
 
-    struct fds_ipfix_msg_hdr *ipfix_msg_hdr;
-    ipfix_msg_hdr = (struct fds_ipfix_msg_hdr*)ipx_msg_ipfix_get_packet(ipfix_msg);
-
-    //read packet header
-    printf("\n");
-    printf("VERSION:[%"PRIu16"] ",ntohs(ipfix_msg_hdr->version));
-    printf("LENGTH:[%"PRIu16"] ",ntohs(ipfix_msg_hdr->length));
-    printf("EXPORT_TIME:[%"PRIu32"] ",ntohl(ipfix_msg_hdr->export_time));
-    printf("SEQ_NUM:[%"PRIu32"] ",ntohl(ipfix_msg_hdr->seq_num));
-    printf("ODID:[%"PRIu32"] \n", ntohl(ipfix_msg_hdr->odid));
-
-
-    //read record
-    const uint32_t rec_cnt = ipx_msg_ipfix_get_drec_cnt(ipfix_msg);
-    for(uint32_t i = 0; i < rec_cnt; ++i){
-
-        //print info about the record
-        printf("\t Record n.%"PRIu32" of %"PRIu32"\n",i+1,rec_cnt);
-
-        //get the record and read all the fields
-        struct ipx_ipfix_record *ipfix_rec = ipx_msg_ipfix_get_drec(ipfix_msg,i);
-
-        struct fds_drec_iter iter;
-        fds_drec_iter_init(&iter, &(ipfix_rec->rec), 0);
-
-        //iterate through all the fields in record
-        while (fds_drec_iter_next(&iter) != FDS_ERR_NOTFOUND) {
-            const struct fds_tfield *field = iter.field.info;
-
-            printf("\t\tEN: [%" PRIu32 "] \t\t ID: [%" PRIu16"]\t\t", field->en, field->id);
-            printf("%s : %s-> \n",field->def->scope->name, field->def->name);
-        }
-    }
     return IPX_OK;
 
 }

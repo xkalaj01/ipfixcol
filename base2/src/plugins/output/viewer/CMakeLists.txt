@@ -4,8 +4,8 @@ add_library(viewer-output MODULE
 		viewer.c
 		config.c
 		config.h
-		#Reader.h
-		#Reader.c
+		Reader.h
+		Reader.c
 )
 
 install(
