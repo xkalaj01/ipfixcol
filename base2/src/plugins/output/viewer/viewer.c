@@ -1,7 +1,7 @@
 /**
  * \file src/plugins/output/viewer/viewer.c
- * \author Lukas Hutak <lukas.hutak@cesnet.cz>
- * \brief Example output plugin for IPFIXcol 2
+ * \author Jan Kala <xkalaj01@stud.fit.vutbr.cz.cz>
+ * \brief Viewer output plugin for IPFIXcol 2
  * \date 2018
  */
 
@@ -106,13 +106,22 @@ ipx_plugin_destroy(ipx_ctx_t *ctx, void *cfg)
 int
 ipx_plugin_process(ipx_ctx_t *ctx, void *cfg, ipx_msg_t *msg)
 {
+    //Check of the type
     int type = ipx_msg_get_type(msg);
     if (type != IPX_MSG_IPFIX) {
         return IPX_OK;
     }
 
+    //Convert the message to the IPFIX message and read it
     ipx_msg_ipfix_t *ipfix_msg = ipx_msg_base2ipfix(msg);
     read_packet(ipfix_msg);
+
+    //Delay between messages printing
+    struct instance_data *data = (struct instance_data *) cfg;
+    const struct timespec *delay = &data->config->sleep_time;
+    if (delay->tv_sec != 0 || delay->tv_nsec != 0) {
+        nanosleep(delay, NULL);
+    }
 
     return IPX_OK;
 
