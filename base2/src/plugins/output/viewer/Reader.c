@@ -39,6 +39,7 @@
 */
 
 #include <inttypes.h>
+#include <libfds.h>
 #include "Reader.h"
 #include "../../../core/message_ipfix.h"
 
@@ -48,12 +49,16 @@
  * Function reads and prints header of the packet and then iterates through the records.
  * Information printed from header of packet are:
  * version, length, export time, sequence number and Observation Domain ID
- * @param[in] msg ipfix message which will be printed
+ * \param[in] msg ipfix message which will be printed
  */
 void read_packet(ipx_msg_ipfix_t *msg) {
 
     const struct fds_ipfix_msg_hdr *ipfix_msg_hdr;
     ipfix_msg_hdr = (const struct fds_ipfix_msg_hdr*)ipx_msg_ipfix_get_packet(msg);
+
+    if (ipfix_msg_hdr->length < FDS_IPFIX_MSG_HDR_LEN){
+        return;
+    }
 
     //Read packet header
     printf("\n## Message header\n");
@@ -63,16 +68,42 @@ void read_packet(ipx_msg_ipfix_t *msg) {
     printf("\tsequence no.:\t%"PRIu32"\n",ntohl(ipfix_msg_hdr->seq_num));
     printf("\tODID:\t\t%"PRIu32"\n", ntohl(ipfix_msg_hdr->odid));
 
+    struct fds_ipfix_msg_hdr *temp = (struct fds_ipfix_msg_hdr*) ipx_msg_ipfix_get_packet(msg);
+    struct fds_sets_iter sets_iter;
+    fds_sets_iter_init(&sets_iter,temp);
+    fds_sets_iter_next(&sets_iter);
+    uint8_t *set_end = (uint8_t *)sets_iter.set + ntohs(sets_iter.set->length);
+    bool is_set_start = true;
+
+
+
     //Read all records from packet
     const uint32_t rec_cnt = ipx_msg_ipfix_get_drec_cnt(msg);
     for (uint32_t i = 0; i < rec_cnt; ++i) {
+
+        struct ipx_ipfix_record *ipfix_rec = ipx_msg_ipfix_get_drec(msg,i);
+
+        //If the last record of set was read, move the set pointer to next set
+        if (ipfix_rec->rec.data > set_end){
+            fds_sets_iter_next(&sets_iter);
+            set_end = (uint8_t *)sets_iter.set + ntohs(sets_iter.set->length);
+            is_set_start = true;
+        }
+
+        //If is the start of the set, print info from header
+        if ( is_set_start == true ){
+            printf("\n** Set header\n");
+            printf("\tset ID: %"PRIu16"\n",ntohs(sets_iter.set->flowset_id));
+            printf("\tlength: %"PRIu16"\n",ntohs(sets_iter.set->length));
+            is_set_start = false;
+        }
 
         //Print record number
         printf("\n-- Record header [n.%"PRIu32" of %"PRIu32"]\n",i+1,rec_cnt);
 
         //Get the specific record and read all the fields
-        struct ipx_ipfix_record *ipfix_rec = ipx_msg_ipfix_get_drec(msg,i);
         read_record(ipfix_rec);
+
     }
 
 
@@ -84,12 +115,14 @@ void read_packet(ipx_msg_ipfix_t *msg) {
  * Reads and prints the header of the record and then iterates through the fields.
  * Information printed from header of record are:
  * Template ID and number of the fields inside the record
- * @param[in] rec record which will be printed
+ * \param[in] rec record which will be printed
  */
 void read_record(struct ipx_ipfix_record *rec) {
     //Write info from header about the record template
-    printf("\ttemplate id:%"PRIu16"\n",rec->rec.tmplt->id);
-    printf("\tfield count:%"PRIu16"\n",rec->rec.tmplt->fields_cnt_total);
+    printf("\ttemplate id: %"PRIu16"\n",rec->rec.tmplt->id);
+    printf("\tfield count: %"PRIu16"\n",rec->rec.tmplt->fields_cnt_total);
+    printf("\tdata length: %"PRIu16"\n",rec->rec.tmplt->data_length);
+    printf("\tsize       : %"PRIu16"\n",rec->rec.size);
 
     //iterate through all the fields in record
     struct fds_drec_iter iter;
@@ -111,7 +144,7 @@ void read_record(struct ipx_ipfix_record *rec) {
  * as well as the information about the data (organisation name and name of the data).
  * Otherwise data are printed in the raw format (hexadecimal)
  * In both cases Enterprise number and ID will be printed.
- * @param[in] field Field which will be printed
+ * \param[in] field Field which will be printed
  */
 void read_field(struct fds_drec_field *field) {
     //Write info from header about field
