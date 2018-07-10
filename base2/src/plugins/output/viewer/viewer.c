@@ -112,9 +112,11 @@ ipx_plugin_process(ipx_ctx_t *ctx, void *cfg, ipx_msg_t *msg)
         return IPX_OK;
     }
 
+    struct fds_iemgr *iemgr = ipx_ctx_iemgr_get(ctx);
+
     //Convert the message to the IPFIX message and read it
     ipx_msg_ipfix_t *ipfix_msg = ipx_msg_base2ipfix(msg);
-    read_packet(ipfix_msg);
+    read_packet(ipfix_msg, iemgr);
 
     //Delay between messages printing
     struct instance_data *data = (struct instance_data *) cfg;

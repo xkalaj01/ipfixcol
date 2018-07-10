@@ -42,10 +42,12 @@
 
 #include <ipfixcol2.h>
 
-void read_packet(ipx_msg_ipfix_t *msg);
+void read_packet(ipx_msg_ipfix_t *msg, struct fds_iemgr *iemgr);
 
 void read_record(struct ipx_ipfix_record *rec);
 
 void read_field(struct fds_drec_field *field);
+
+void read_template_set(struct fds_tset_iter *set_iter);
 
 #endif //IPFIXCOL_READER_H
