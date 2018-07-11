@@ -42,12 +42,64 @@
 
 #include <ipfixcol2.h>
 
-void read_packet(ipx_msg_ipfix_t *msg, struct fds_iemgr *iemgr);
+/**
+ * \brief Reads the data inside of ipfix message
+ *
+ * Function reads and prints header of the packet and then iterates through the records.
+ * Information printed from header of packet are:
+ * version, length, export time, sequence number and Observation Domain ID
+ * \param[in] msg ipfix message which will be printed
+ */
+void
+read_packet(ipx_msg_ipfix_t *msg, const struct fds_iemgr *iemgr);
 
-void read_record(struct ipx_ipfix_record *rec);
+/**
+ * \brief Reads data inside the single record of IPFIX message
+ *
+ * Reads and prints the header of the record and then iterates through the fields.
+ * Information printed from header of record are:
+ * Template ID and number of the fields inside the record
+ * \param[in] rec record which will be printed
+ */
+void
+read_record(struct ipx_ipfix_record *rec);
 
-void read_field(struct fds_drec_field *field);
+/**
+ * \brief Reads the data inside the field of IPFIX message
+ *
+ * Reads and prints all the information about the data in the field
+ * if the detailed definition is known, data are printed in readable format
+ * as well as the information about the data (organisation name and name of the data).
+ * Otherwise data are printed in the raw format (hexadecimal)
+ * In both cases Enterprise number and ID will be printed.
+ * \param[in] field Field which will be printed
+ */
+void
+read_field(struct fds_drec_field *field);
 
-void read_template_set(struct fds_tset_iter *set_iter);
+/**
+ * \brief Reads set which contains template
+ *
+ * Reads template type of sets which has set id == 2 or set id == 3. Uses Information Element manager from
+ * parameters for parsing the data inside of the template.
+ * \param tset_iter Template iterator
+ * \param set_id ID of the whole set
+ * \param iemgr IE Manager
+ */
+void
+read_template_set(struct fds_tset_iter *tset_iter, uint16_t set_id, const struct fds_iemgr *iemgr);
+
+/**
+ * \brief Reads single set
+ *
+ * Reads single set and determines what kind of set it is and which read_xxx function to use for reading the fields.
+ *
+ * \param sets_iter Sets iterator
+ * \param msg  IPFix message
+ * \param iemgr  IE Manager for parsing the fields
+ * \param rec_i Number of record
+ */
+void
+read_set(struct fds_sets_iter *sets_iter, ipx_msg_ipfix_t *msg, const struct fds_iemgr *iemgr, uint32_t *rec_i);
 
 #endif //IPFIXCOL_READER_H

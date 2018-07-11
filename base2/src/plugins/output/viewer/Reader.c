@@ -43,15 +43,7 @@
 #include "Reader.h"
 #include "../../../core/message_ipfix.h"
 
-/**
- * \brief Reads the data inside of ipfix message
- *
- * Function reads and prints header of the packet and then iterates through the records.
- * Information printed from header of packet are:
- * version, length, export time, sequence number and Observation Domain ID
- * \param[in] msg ipfix message which will be printed
- */
-void read_packet(ipx_msg_ipfix_t *msg, struct fds_iemgr *iemgr) {
+void read_packet(ipx_msg_ipfix_t *msg, const struct fds_iemgr *iemgr) {
 
     const struct fds_ipfix_msg_hdr *ipfix_msg_hdr;
     ipfix_msg_hdr = (const struct fds_ipfix_msg_hdr*)ipx_msg_ipfix_get_packet(msg);
@@ -60,7 +52,7 @@ void read_packet(ipx_msg_ipfix_t *msg, struct fds_iemgr *iemgr) {
         return;
     }
 
-    //Read packet header
+    //Print packet header
     printf("\n## Message header\n");
     printf("\tversion:\t%"PRIu16"\n",ntohs(ipfix_msg_hdr->version));
     printf("\tlength:\t\t%"PRIu16"\n",ntohs(ipfix_msg_hdr->length));
@@ -68,102 +60,120 @@ void read_packet(ipx_msg_ipfix_t *msg, struct fds_iemgr *iemgr) {
     printf("\tsequence no.:\t%"PRIu32"\n",ntohl(ipfix_msg_hdr->seq_num));
     printf("\tODID:\t\t%"PRIu32"\n", ntohl(ipfix_msg_hdr->odid));
 
+    //Prepare iterator for sets
     struct fds_ipfix_msg_hdr *temp = (struct fds_ipfix_msg_hdr*) ipx_msg_ipfix_get_packet(msg);
     struct fds_sets_iter sets_iter;
     fds_sets_iter_init(&sets_iter,temp);
 
+    //Get number of sets
     struct ipx_ipfix_set *sets;
     size_t set_cnt;
     ipx_msg_ipfix_get_sets(msg,&sets,&set_cnt);
 
-    //Read all records from packet
+    //Get the number of records from the packet
     const uint32_t rec_cnt = ipx_msg_ipfix_get_drec_cnt(msg);
     uint32_t rec_i = 0;
 
-    printf("NUMBER OF SETS %zu\n",set_cnt);
-
+    //Iteration through all the sets
     for (uint32_t i = 0; i < set_cnt; ++i){
         fds_sets_iter_next(&sets_iter);
-        uint8_t *set_end = (uint8_t *)sets_iter.set + ntohs(sets_iter.set->length);
-        uint16_t set_id = ntohs(sets_iter.set->flowset_id);
-
-        printf("\n** Set header\n");
-        printf("\tset ID: %"PRIu16"\n",set_id);
-        printf("\tlength: %"PRIu16"\n",ntohs(sets_iter.set->length));
-
-        //Template set
-        if (set_id < 255){
-
-            struct fds_tset_iter tset_iter;
-            fds_tset_iter_init(&tset_iter,sets_iter.set);
-
-            //Iteration through all templates in the set
-            while (fds_tset_iter_next(&tset_iter) == FDS_OK){
-                //setting the type of the Template
-                enum fds_template_type type;
-                void *ptr;
-                switch (set_id){
-                    case FDS_IPFIX_SET_TMPLT:
-                        type = FDS_TYPE_TEMPLATE;
-                        ptr = tset_iter.ptr.trec;
-                        break;
-                    case FDS_IPFIX_SET_OPTS_TMPLT:
-                        type = FDS_TYPE_TEMPLATE_OPTS;
-                        ptr = tset_iter.ptr.opts_trec;
-                        break;
-                    default:
-                        printf("\tundefined template\n");
-                        continue;
-                }
-                //Filling the template structure with data from raw packet
-                uint16_t tmplt_size = tset_iter.size;
-                struct fds_template *tmplt;
-                fds_template_parse(type,ptr,&tmplt_size,&tmplt);
-
-                //Printing out the header
-                printf("\n-- Template header\n");
-                printf("\ttemplate id: %"PRIu16"\n",tmplt->id);
-                printf("\tfield count: %"PRIu16"\n",tmplt->fields_cnt_total);
-
-                //Using IEManager to fill the definitions of the fields in the template
-                fds_template_ies_define(tmplt, iemgr , false);
-
-                //Iteration through the fields and printing them out
-                for (uint16_t i = 0; i < tmplt->fields_cnt_total ; ++i) {
-                    printf("++ %s\n",tmplt->fields[i].def->name);
-                }
-            }
-
-        }
-        else{
-            //Data set
-            struct ipx_ipfix_record *ipfix_rec = ipx_msg_ipfix_get_drec(msg,rec_i);
-
-            //Check if the record belongs to current set
-            while ((ipfix_rec != NULL) && (ipfix_rec->rec.data < set_end) && (rec_i < rec_cnt)){
-                //Print record header
-                printf("\n-- Record header [n.%"PRIu32" of %"PRIu32"]\n",rec_i+1,rec_cnt);
-
-                //Get the specific record and read all the fields
-                read_record(ipfix_rec);
-
-                //Get the next record
-                rec_i++;
-                ipfix_rec = ipx_msg_ipfix_get_drec(msg,rec_i);
-            }
-
-        }
+        read_set(&sets_iter,msg,iemgr,&rec_i);
     }
 }
 
-/**
- * \brief Reads data inside the single record of IPFIX message
- *
- * Reads and prints the header of the record and then iterates through the fields.
- * Information printed from header of record are:
- * Template ID and number of the fields inside the record
- * \param[in] rec record which will be printed
- */
+void read_set(struct fds_sets_iter *sets_iter, ipx_msg_ipfix_t *msg, const struct fds_iemgr *iemgr, uint32_t *rec_i) {
+    uint8_t *set_end = (uint8_t *)sets_iter->set + ntohs(sets_iter->set->length);
+    uint16_t set_id = ntohs(sets_iter->set->flowset_id);
+
+    const uint32_t rec_cnt = ipx_msg_ipfix_get_drec_cnt(msg);
+
+    printf("\n** Set header\n");
+    printf("\tset ID: %"PRIu16"\n",set_id);
+    printf("\tlength: %"PRIu16"\n",ntohs(sets_iter->set->length));
+
+    //Template set
+    if (set_id == FDS_IPFIX_SET_TMPLT || set_id ==FDS_IPFIX_SET_OPTS_TMPLT){
+
+        struct fds_tset_iter tset_iter;
+        fds_tset_iter_init(&tset_iter,sets_iter->set);
+
+        //Iteration through all templates in the set
+        while (fds_tset_iter_next(&tset_iter) == FDS_OK){
+            //Read and print single template
+            read_template_set(&tset_iter,set_id,iemgr);
+        }
+    }
+    else{
+        struct ipx_ipfix_record *ipfix_rec = ipx_msg_ipfix_get_drec(msg,*rec_i);
+
+        //Iteration through the records which belongs to the current set
+        while ((ipfix_rec != NULL) && (ipfix_rec->rec.data < set_end) && (*rec_i < rec_cnt)){
+            //Print record header
+            printf("\n-- Record header [n.%"PRIu32" of %"PRIu32"]\n",*rec_i+1,rec_cnt);
+
+            //Get the specific record and read all the fields
+            read_record(ipfix_rec);
+
+            //Get the next record
+            (*rec_i)++;
+            ipfix_rec = ipx_msg_ipfix_get_drec(msg,*rec_i);
+        }
+
+    }
+}
+
+void read_template_set(struct fds_tset_iter *tset_iter, uint16_t set_id, const struct fds_iemgr *iemgr) {
+    enum fds_template_type type;
+    void *ptr;
+    switch (set_id){
+        case FDS_IPFIX_SET_TMPLT:
+            type = FDS_TYPE_TEMPLATE;
+            ptr = tset_iter->ptr.trec;
+            break;
+        case FDS_IPFIX_SET_OPTS_TMPLT:
+            type = FDS_TYPE_TEMPLATE_OPTS;
+            ptr = tset_iter->ptr.opts_trec;
+            break;
+        default:
+            printf("\t[undefined template]\n");
+            return;
+    }
+    //Filling the template structure with data from raw packet
+    uint16_t tmplt_size = tset_iter->size;
+    struct fds_template *tmplt;
+    fds_template_parse(type,ptr,&tmplt_size,&tmplt);
+
+    //Printing out the header
+    printf("\n-- Template header\n");
+    printf("\ttemplate id: %"PRIu16"\n",tmplt->id);
+    printf("\tfield count: %"PRIu16"\n",tmplt->fields_cnt_total);
+
+    //Using IEManager to fill the definitions of the fields in the template
+    fds_template_ies_define(tmplt, iemgr , false);
+
+    printf("\n\tfields:\n");
+    //Iteration through the fields and printing them out
+    for (uint16_t i = 0; i < tmplt->fields_cnt_total ; ++i) {
+        struct fds_tfield current = tmplt->fields[i];
+        printf("\t");
+        printf("en:\t%"PRIu32"\t",current.en);
+        printf("id:\t%"PRIu16"\t",current.id);
+        //Unknown field definition
+        if (current.def == NULL){
+            printf("unknown field name\n");
+        }
+        //Known field definition
+        else{
+            printf("size:\t");
+            //In case of variable length print keyword "var"
+            current.length == FDS_IPFIX_VAR_IE_LEN ? printf("var\t") : printf("%"PRIu16"\t", current.length);
+            printf("[%s] ",current.def->scope->name);
+            printf("%s",current.def->name);
+        }
+        printf("\n");
+    }
+}
+
 void read_record(struct ipx_ipfix_record *rec) {
     //Write info from header about the record template
     printf("\ttemplate id: %"PRIu16"\n",rec->rec.tmplt->id);
@@ -183,16 +193,6 @@ void read_record(struct ipx_ipfix_record *rec) {
     }
 }
 
-/**
- * \brief Reads the data inside the field of IPFIX message
- *
- * Reads and prints all the information about the data in the field
- * if the detailed definition is known, data are printed in readable format
- * as well as the information about the data (organisation name and name of the data).
- * Otherwise data are printed in the raw format (hexadecimal)
- * In both cases Enterprise number and ID will be printed.
- * \param[in] field Field which will be printed
- */
 void read_field(struct fds_drec_field *field) {
     //Write info from header about field
     printf("\ten:\t%" PRIu32 "\tid:\t%" PRIu16"\t", field->info->en, field->info->id);
@@ -287,11 +287,4 @@ void read_field(struct fds_drec_field *field) {
         return;
     }
 }
-
-void read_set(struct fds_tset_iter *set_iter) {
-
-
-}
-
-
 
