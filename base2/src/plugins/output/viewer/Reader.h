@@ -100,6 +100,6 @@ read_template_set(struct fds_tset_iter *tset_iter, uint16_t set_id, const struct
  * \param rec_i Number of record
  */
 void
-read_set(struct fds_sets_iter *sets_iter, ipx_msg_ipfix_t *msg, const struct fds_iemgr *iemgr, uint32_t *rec_i);
+read_set(struct ipx_ipfix_set *set, ipx_msg_ipfix_t *msg, const struct fds_iemgr *iemgr, uint32_t *rec_i);
 
 #endif //IPFIXCOL_READER_H
