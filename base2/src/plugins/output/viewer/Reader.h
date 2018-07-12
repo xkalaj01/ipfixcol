@@ -1,7 +1,7 @@
 /**
  * \file src/plugins/output/viewer/Reader.h
- * \author Jan Kala <xkalaj01@stud.fit.vutbr.cz.cz>
- * \brief Output viewer module for showing basic data oon STDIN (header file)
+ * \author Jan Kala <xkalaj01@stud.fit.vutbr.cz>
+ * \brief Viewer - output module for printing information about incoming packets on stdout (header file)
  * \date 2018
  */
 /* Copyright (C) 2018 CESNET, z.s.p.o.
@@ -51,7 +51,7 @@
  * \param[in] msg ipfix message which will be printed
  */
 void
-read_packet(ipx_msg_ipfix_t *msg, const struct fds_iemgr *iemgr);
+read_packet(ipx_msg_ipfix_t *msg, const fds_iemgr_t *iemgr);
 
 /**
  * \brief Reads data inside the single record of IPFIX message
@@ -87,7 +87,7 @@ read_field(struct fds_drec_field *field);
  * \param iemgr IE Manager
  */
 void
-read_template_set(struct fds_tset_iter *tset_iter, uint16_t set_id, const struct fds_iemgr *iemgr);
+read_template_set(struct fds_tset_iter *tset_iter, uint16_t set_id, const fds_iemgr_t *iemgr);
 
 /**
  * \brief Reads single set
@@ -100,6 +100,6 @@ read_template_set(struct fds_tset_iter *tset_iter, uint16_t set_id, const struct
  * \param rec_i Number of record
  */
 void
-read_set(struct ipx_ipfix_set *set, ipx_msg_ipfix_t *msg, const struct fds_iemgr *iemgr, uint32_t *rec_i);
+read_set(struct ipx_ipfix_set *set, ipx_msg_ipfix_t *msg, const fds_iemgr_t *iemgr, uint32_t *rec_i);
 
 #endif //IPFIXCOL_READER_H
