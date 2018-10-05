@@ -62,7 +62,7 @@ read_packet(ipx_msg_ipfix_t *msg, const fds_iemgr_t *iemgr);
  * \param[in] rec record which will be printed
  */
 void
-read_record(struct ipx_ipfix_record *rec);
+read_record(struct ipx_ipfix_record *rec, const fds_iemgr_t *iemgr);
 
 /**
  * \brief Reads the data inside the field of IPFIX message
@@ -75,7 +75,7 @@ read_record(struct ipx_ipfix_record *rec);
  * \param[in] field Field which will be printed
  */
 void
-read_field(struct fds_drec_field *field);
+read_field(struct fds_drec_field *field, unsigned int indent, const fds_iemgr_t *iemgr);
 
 /**
  * \brief Reads set which contains template

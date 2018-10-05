@@ -110,7 +110,7 @@ void read_set(struct ipx_ipfix_set *set, ipx_msg_ipfix_t *msg, const fds_iemgr_t
             printf("\n-- Record header [n.%"PRIu32" of %"PRIu32"]\n", *rec_i+1, rec_cnt);
 
             // Get the specific record and read all the fields
-            read_record(ipfix_rec);
+            read_record(ipfix_rec, iemgr); //add iemgr
 
             // Get the next record
             (*rec_i)++;
@@ -181,7 +181,7 @@ void read_template_set(struct fds_tset_iter *tset_iter, uint16_t set_id, const f
     }
 }
 
-void read_record(struct ipx_ipfix_record *rec) {
+void read_record(struct ipx_ipfix_record *rec, const fds_iemgr_t *iemgr) {
     // Write info from header about the record template
     printf("\tfield count: %"PRIu16"\n", rec->rec.tmplt->fields_cnt_total);
     printf("\tdata length: %"PRIu16"\n", rec->rec.tmplt->data_length);
@@ -195,13 +195,13 @@ void read_record(struct ipx_ipfix_record *rec) {
     while (fds_drec_iter_next(&iter) != FDS_ERR_NOTFOUND) {
         struct fds_drec_field field = iter.field;
 
-        read_field(&field);
+        read_field(&field,1, iemgr); // add iemgr
     }
 }
 
-void read_field(struct fds_drec_field *field) {
+void read_field(struct fds_drec_field *field, unsigned int indent, const fds_iemgr_t *iemgr) {
     // Write info from header about field
-    printf("\ten:\t%" PRIu32 "\tid:\t%" PRIu16"\t", field->info->en, field->info->id);
+    printf("%*sen:\t%" PRIu32 "\tid:\t%" PRIu16"\t",indent,"\t", field->info->en, field->info->id);
 
     enum fds_iemgr_element_type type;
     char *org;
@@ -217,55 +217,83 @@ void read_field(struct fds_drec_field *field) {
     }
     else {
         type = field->info->def->data_type;
+
+        switch(type){
+        case FDS_ET_BASIC_LIST:
+            {
+                // Iteration through the basic list
+                struct fds_blist_iter blist_it;
+                fds_blist_iter_init(&blist_it,field, iemgr);
+                while (fds_blist_iter_next(&blist_it) == FDS_OK){
+                    read_field(&blist_it.field,indent+1, iemgr);
+                }
+            }
+            break;
+        case FDS_ET_SUB_TEMPLATE_LIST:
+        case FDS_ET_SUB_TEMPLATE_MULTILIST:
+        {
+            // Iteration through the subTemplate and subTemplateMulti lists
+            struct fds_stlist_iter stlist_iter;
+            // create template manager
+            // set time and iemgr to tmgr
+            // get snapshot from the tmgr
+            // WIN!
+            // fds_stlist_iter_init(&stlist_iter, field)
+
+        }
+            break;
+        default:
+            break;
+        }
         org = field->info->def->scope->name;
         field_name = field->info->def->name;
 
         switch(field->info->def->data_unit){
-            case FDS_EU_NONE :
-                unit = "";
-                break;
-            case FDS_EU_BITS :
-                unit = "bits";
-                break;
-            case FDS_EU_OCTETS :
-                unit = "octets";
-                break;
-            case FDS_EU_PACKETS :
-                unit = "packets";
-                break;
-            case FDS_EU_FLOWS:
-                unit = "flows";
-                break;
-            case FDS_EU_SECONDS :
-                unit = "seconds";
-                break;
-            case FDS_EU_MILLISECONDS :
-                unit = "milliseconds";
-                break;
-            case FDS_EU_MICROSECONDS :
-                unit = "microseconds";
-                break;
-            case FDS_EU_NANOSECONDS :
-                unit = "nanoseconds";
-                break;
-            case FDS_EU_4_OCTET_WORDS :
-                unit = "4 octet word";
-                break;
-            case FDS_EU_MESSAGES :
-                unit = "messages";
-                break;
-            case FDS_EU_HOPS :
-                unit = "hops";
-                break;
-            case FDS_EU_ENTRIES :
-                unit = "entries";
-                break;
-            case FDS_EU_FRAMES :
-                unit = "frames";
-                break;
-            default:
-                unit = "";
-                break;
+        case FDS_EU_NONE :
+            unit = "";
+            break;
+        case FDS_EU_BITS :
+            unit = "bits";
+            break;
+        case FDS_EU_OCTETS :
+            unit = "octets";
+            break;
+        case FDS_EU_PACKETS :
+            unit = "packets";
+            break;
+        case FDS_EU_FLOWS:
+            unit = "flows";
+            break;
+        case FDS_EU_SECONDS :
+            unit = "seconds";
+            break;
+        case FDS_EU_MILLISECONDS :
+            unit = "milliseconds";
+            break;
+        case FDS_EU_MICROSECONDS :
+            unit = "microseconds";
+            break;
+        case FDS_EU_NANOSECONDS :
+            unit = "nanoseconds";
+            break;
+        case FDS_EU_4_OCTET_WORDS :
+            unit = "4 octet word";
+            break;
+        case FDS_EU_MESSAGES :
+            unit = "messages";
+            break;
+        case FDS_EU_HOPS :
+            unit = "hops";
+            break;
+        case FDS_EU_ENTRIES :
+            unit = "entries";
+            break;
+        case FDS_EU_FRAMES :
+            unit = "frames";
+            break;
+        default:
+            unit = "";
+            break;
         }
     }
     printf("[%s] %s : ", org, field_name);
