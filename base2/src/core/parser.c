@@ -790,7 +790,7 @@ parser_parse_tset(struct ipx_parser_data *pdata, struct fds_ipfix_set_hdr *tset)
         return rc_parse;
     }
 
-    if (rc_iter != FDS_ERR_NOTFOUND) {
+    if (rc_iter != FDS_EOC) {
         const struct ipx_msg_ctx *msg_ctx = &pdata->ipfix_msg->ctx;
         PARSER_ERROR(pdata->parser, msg_ctx, "Failed to parse an IPFIX (Options) Template (%s).",
             fds_tset_iter_err(&it));
@@ -872,7 +872,7 @@ parser_parse_dset(struct ipx_parser_data *pdata, struct fds_ipfix_set_hdr *dset)
         pdata->data_recs++;
     }
 
-    if (rc == FDS_ERR_NOTFOUND) {
+    if (rc == FDS_EOC) {
         return IPX_OK;
     }
 
@@ -962,7 +962,7 @@ parser_parse_message(struct ipx_parser_data *pdata)
         return rc_parse;
     }
 
-    if (rc_iter != FDS_ERR_NOTFOUND) {
+    if (rc_iter != FDS_EOC) {
         const struct ipx_msg_ctx *msg_ctx = &pdata->ipfix_msg->ctx;
         PARSER_ERROR(pdata->parser, msg_ctx, "Failed to parse an IPFIX Set (%s).",
             fds_sets_iter_err(&it));
@@ -1044,6 +1044,7 @@ ipx_parser_verb(ipx_parser_t *parser, enum ipx_verb_level *v_new, enum ipx_verb_
 int
 ipx_parser_process(ipx_parser_t *parser, ipx_msg_ipfix_t **ipfix, ipx_msg_garbage_t **garbage)
 {
+    *garbage = NULL;
     const struct ipx_msg_ctx *msg_ctx = &(*ipfix)->ctx;
     const struct fds_ipfix_msg_hdr *msg_data = (struct fds_ipfix_msg_hdr *)(*ipfix)->raw_pkt;
 
@@ -1088,6 +1089,7 @@ ipx_parser_process(ipx_parser_t *parser, ipx_msg_ipfix_t **ipfix, ipx_msg_garbag
     PARSER_DEBUG(parser, msg_ctx, "Processing an IPFIX Message (Seq. number %" PRIu32 ")",
         msg_seq);
 
+    bool old_oos = false;  // Old out of sequence message
     if (info->seq_num != msg_seq) {
         if ((info->flags & SIF_SEEN) == 0) {
             // The first message from this combination of the TS, ODID and Stream ID
@@ -1098,7 +1100,9 @@ ipx_parser_process(ipx_parser_t *parser, ipx_msg_ipfix_t **ipfix, ipx_msg_garbag
             PARSER_WARNING(parser, msg_ctx, "Unexpected Sequence number (expected: "
                 "%" PRIu32 ", got: %" PRIu32 ").", info->seq_num, msg_seq);
             if (parser_seq_num_cmp(msg_seq, info->seq_num) > 0) {
-                info->seq_num = msg_seq;
+                info->seq_num = msg_seq; // Newer than expected
+            } else {
+                old_oos = true; // Older than expected
             }
         }
     }
@@ -1116,7 +1120,8 @@ ipx_parser_process(ipx_parser_t *parser, ipx_msg_ipfix_t **ipfix, ipx_msg_garbag
         case FDS_ERR_NOTFOUND:
             // Unable to find a corresponding snapshot
             PARSER_WARNING(parser, msg_ctx, "Received IPFIX Message has too old Export Time. "
-                "Template are no longer available. All its records are ignored.", 0);
+                "Templates are no longer available and therefore, all its data records are "
+                "ignored.", 0);
             return IPX_OK;
         case FDS_ERR_NOMEM:
             // Memory allocation failed
@@ -1157,7 +1162,9 @@ ipx_parser_process(ipx_parser_t *parser, ipx_msg_ipfix_t **ipfix, ipx_msg_garbag
     }
 
     // Update expected Sequence number of the next message
-    info->seq_num += parser_data.data_recs;
+    if (!old_oos) {
+        info->seq_num += parser_data.data_recs;
+    }
 
     ipx_msg_garbage_t *garbage_msg = NULL;
     if (parser_data.tmplt_changes) {
