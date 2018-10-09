@@ -110,7 +110,7 @@ void read_set(struct ipx_ipfix_set *set, ipx_msg_ipfix_t *msg, const fds_iemgr_t
             printf("\n-- Record header [n.%"PRIu32" of %"PRIu32"]\n", *rec_i+1, rec_cnt);
 
             // Get the specific record and read all the fields
-            read_record(ipfix_rec, iemgr); //add iemgr
+            read_record(&ipfix_rec->rec, 1, iemgr); //add iemgr
 
             // Get the next record
             (*rec_i)++;
@@ -181,27 +181,39 @@ void read_template_set(struct fds_tset_iter *tset_iter, uint16_t set_id, const f
     }
 }
 
-void read_record(struct ipx_ipfix_record *rec, const fds_iemgr_t *iemgr) {
-    // Write info from header about the record template
-    printf("\tfield count: %"PRIu16"\n", rec->rec.tmplt->fields_cnt_total);
-    printf("\tdata length: %"PRIu16"\n", rec->rec.tmplt->data_length);
-    printf("\tsize       : %"PRIu16"\n", rec->rec.size);
-
-    // Iterate through all the fields in record
-    struct fds_drec_iter iter;
-    fds_drec_iter_init(&iter, &(rec->rec), 0);
-
-    printf("\n\tfields:\n");
-    while (fds_drec_iter_next(&iter) != FDS_ERR_NOTFOUND) {
-        struct fds_drec_field field = iter.field;
-
-        read_field(&field,1, iemgr); // add iemgr
+void print_indent(unsigned int n){
+    for (int i = 0; i < n; i++){
+        putchar('\t');
     }
 }
 
-void read_field(struct fds_drec_field *field, unsigned int indent, const fds_iemgr_t *iemgr) {
+void read_record(struct fds_drec *rec, unsigned int indent, const fds_iemgr_t *iemgr) {
+    // Write info from header about the record template
+    print_indent(indent);
+    printf("field count: %"PRIu16"\n", rec->tmplt->fields_cnt_total);
+    print_indent(indent);
+    printf("data length: %"PRIu16"\n", rec->tmplt->data_length);
+    print_indent(indent);
+    printf("size       : %"PRIu16"\n", rec->size);
+
+    // Iterate through all the fields in record
+    struct fds_drec_iter iter;
+    fds_drec_iter_init(&iter, rec, 0);
+
+    putchar('\n');
+    print_indent(indent);
+    printf("fields:\n");
+    while (fds_drec_iter_next(&iter) != FDS_EOC) {
+        struct fds_drec_field field = iter.field;
+
+        read_field(&field,indent+1, iemgr, rec->snap); // add iemgr
+    }
+}
+
+void read_field(struct fds_drec_field *field, unsigned int indent, const fds_iemgr_t *iemgr, const fds_tsnapshot_t *snap) {
     // Write info from header about field
-    printf("%*sen:\t%" PRIu32 "\tid:\t%" PRIu16"\t",indent,"\t", field->info->en, field->info->id);
+    print_indent(indent);
+    printf("en:\t%" PRIu32 "\tid:\t%" PRIu16"\t", field->info->en, field->info->id);
 
     enum fds_iemgr_element_type type;
     char *org;
@@ -217,34 +229,6 @@ void read_field(struct fds_drec_field *field, unsigned int indent, const fds_iem
     }
     else {
         type = field->info->def->data_type;
-
-        switch(type){
-        case FDS_ET_BASIC_LIST:
-            {
-                // Iteration through the basic list
-                struct fds_blist_iter blist_it;
-                fds_blist_iter_init(&blist_it,field, iemgr);
-                while (fds_blist_iter_next(&blist_it) == FDS_OK){
-                    read_field(&blist_it.field,indent+1, iemgr);
-                }
-            }
-            break;
-        case FDS_ET_SUB_TEMPLATE_LIST:
-        case FDS_ET_SUB_TEMPLATE_MULTILIST:
-        {
-            // Iteration through the subTemplate and subTemplateMulti lists
-            struct fds_stlist_iter stlist_iter;
-            // create template manager
-            // set time and iemgr to tmgr
-            // get snapshot from the tmgr
-            // WIN!
-            // fds_stlist_iter_init(&stlist_iter, field)
-
-        }
-            break;
-        default:
-            break;
-        }
         org = field->info->def->scope->name;
         field_name = field->info->def->name;
 
@@ -295,6 +279,44 @@ void read_field(struct fds_drec_field *field, unsigned int indent, const fds_iem
             unit = "";
             break;
         }
+    }
+
+    switch(type){
+    case FDS_ET_BASIC_LIST: {
+        // Iteration through the basic list
+        bool did_read = false;
+        printf("[%s] %s\n", org, field_name);
+        print_indent(indent);
+        printf("++basic list++\n");
+        struct fds_blist_iter blist_it;
+        fds_blist_iter_init(&blist_it,field, iemgr);
+        while (fds_blist_iter_next(&blist_it) == FDS_OK){
+            read_field(&blist_it.field,indent+1, iemgr, snap);
+            did_read = true;
+        }
+        if (!did_read){
+            print_indent(indent+1);
+            printf("empty\n");
+        }
+        return;
+    }
+    case FDS_ET_SUB_TEMPLATE_LIST:
+    case FDS_ET_SUB_TEMPLATE_MULTILIST: {
+        // Iteration through the subTemplate and subTemplateMulti lists
+        printf("[%s] %s\n", org, field_name);
+        print_indent(indent);
+        (type == FDS_ET_SUB_TEMPLATE_LIST) ? printf("++subTemplate list++\n") : printf("++subTemplateMulti list++\n");
+        struct fds_stlist_iter stlist_iter;
+        print_indent(indent);
+        printf("- semantic: %d\n",stlist_iter.semantic);
+        fds_stlist_iter_init(&stlist_iter, field, snap, 0);
+        while (fds_stlist_iter_next(&stlist_iter) == FDS_OK){
+            read_record(&stlist_iter.rec, indent+1, iemgr);
+        }
+        return;
+    }
+    default:
+        break;
     }
     printf("[%s] %s : ", org, field_name);
 
