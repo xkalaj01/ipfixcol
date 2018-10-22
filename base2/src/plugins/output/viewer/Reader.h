@@ -43,6 +43,27 @@
 #include <ipfixcol2.h>
 
 /**
+ * \brief spaces in output for Enterprise number field
+ */
+#define WRITER_EN_SPACE 8
+/**
+ * \brief Spaces in output for ID field
+ */
+#define WRITER_ID_SPACE 6
+/**
+ * \brief Spaces in output for size field
+ */
+#define WRITER_SIZE_SPACE 7
+/**
+ * \brief Spaces in output for Field name
+ */
+#define WRITER_FIELD_NAME_SPACE 35
+/**
+ * \brief Spaces in output for Organization name
+ */
+#define WRITER_ORG_NAME_SPACE 12
+
+/**
  * \brief Reads the data inside of ipfix message
  *
  * Function reads and prints header of the packet and then iterates through the records.

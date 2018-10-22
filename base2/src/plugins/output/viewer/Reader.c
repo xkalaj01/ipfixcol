@@ -163,18 +163,19 @@ void read_template_set(struct fds_tset_iter *tset_iter, uint16_t set_id, const f
     for (uint16_t i = 0; i < tmplt->fields_cnt_total ; ++i) {
         struct fds_tfield current = tmplt->fields[i];
         printf("\t");
-        printf("en:\t%"PRIu32"\t", current.en);
-        printf("id:\t%"PRIu16"\t", current.id);
+        printf("en:%*"PRIu32" ",WRITER_EN_SPACE, current.en);
+        printf("id:%*"PRIu16" ",WRITER_ID_SPACE, current.id);
+        printf("size:");
+        // In case of variable length print keyword "var"
+        current.length == FDS_IPFIX_VAR_IE_LEN ? printf("%*s ", WRITER_SIZE_SPACE, "var") : printf("%*"PRIu16" ", WRITER_SIZE_SPACE,current.length);
+
         // Unknown field definition
         if (current.def == NULL){
             printf("<Unknown field name>\n");
         }
         // Known field definition
         else{
-            printf("size:\t");
-            // In case of variable length print keyword "var"
-            current.length == FDS_IPFIX_VAR_IE_LEN ? printf("var\t") : printf("%"PRIu16"\t", current.length);
-            printf("[%s] ", current.def->scope->name);
+            printf("%*s ", WRITER_ORG_NAME_SPACE, current.def->scope->name);
             printf("%s", current.def->name);
         }
         printf("\n");
@@ -205,15 +206,15 @@ void read_record(struct fds_drec *rec, unsigned int indent, const fds_iemgr_t *i
     printf("fields:\n");
     while (fds_drec_iter_next(&iter) != FDS_EOC) {
         struct fds_drec_field field = iter.field;
-
-        read_field(&field,indent+1, iemgr, rec->snap); // add iemgr
+        read_field(&field,indent, iemgr, rec->snap); // add iemgr
     }
+    putchar('\n');
 }
 
 void read_field(struct fds_drec_field *field, unsigned int indent, const fds_iemgr_t *iemgr, const fds_tsnapshot_t *snap) {
     // Write info from header about field
     print_indent(indent);
-    printf("en:\t%" PRIu32 "\tid:\t%" PRIu16"\t", field->info->en, field->info->id);
+    printf("en:%*" PRIu32 " id:%*" PRIu16" ", WRITER_EN_SPACE, field->info->en, WRITER_ID_SPACE, field->info->id);
 
     enum fds_iemgr_element_type type;
     char *org;
@@ -231,16 +232,21 @@ void read_field(struct fds_drec_field *field, unsigned int indent, const fds_iem
         type = field->info->def->data_type;
         org = field->info->def->scope->name;
         field_name = field->info->def->name;
-        unit = fds_iemgr_unit2str(field->info->def->data_unit);
+        if (field->info->def->data_unit != FDS_EU_NONE){
+            unit = fds_iemgr_unit2str(field->info->def->data_unit);
+        }
+        else{
+            unit = "";
+        }
     }
 
     switch(type){
     case FDS_ET_BASIC_LIST: {
         // Iteration through the basic list
         bool did_read = false;
-        printf("[%s] %s\n", org, field_name);
-        print_indent(indent);
-        printf("++basic list++\n");
+        printf("%*s %s\n", WRITER_ORG_NAME_SPACE, org, field_name);
+//        print_indent(indent);
+//        printf("++basic list++\n");
         struct fds_blist_iter blist_it;
         fds_blist_iter_init(&blist_it,field, iemgr);
         while (fds_blist_iter_next(&blist_it) == FDS_OK){
@@ -251,27 +257,28 @@ void read_field(struct fds_drec_field *field, unsigned int indent, const fds_iem
             print_indent(indent+1);
             printf("empty\n");
         }
+        putchar('\n');
         return;
     }
     case FDS_ET_SUB_TEMPLATE_LIST:
     case FDS_ET_SUB_TEMPLATE_MULTILIST: {
         // Iteration through the subTemplate and subTemplateMulti lists
-        printf("[%s] %s\n", org, field_name);
-        print_indent(indent);
-        (type == FDS_ET_SUB_TEMPLATE_LIST) ? printf("++subTemplate list++\n") : printf("++subTemplateMulti list++\n");
+        printf("%*s %s\n", WRITER_ORG_NAME_SPACE, org, field_name);
+//        print_indent(indent);
+//        (type == FDS_ET_SUB_TEMPLATE_LIST) ? printf("++subTemplate list++\n") : printf("++subTemplateMulti list++\n");
         struct fds_stlist_iter stlist_iter;
         print_indent(indent);
-        printf("- semantic: %d\n",stlist_iter.semantic);
         fds_stlist_iter_init(&stlist_iter, field, snap, 0);
+        printf("- semantic: %d\n",stlist_iter.semantic);
         while (fds_stlist_iter_next(&stlist_iter) == FDS_OK){
             read_record(&stlist_iter.rec, indent+1, iemgr);
         }
+        putchar('\n');
         return;
     }
     default:
-        break;
+        printf("%*s %-*s : ", WRITER_ORG_NAME_SPACE,org, WRITER_FIELD_NAME_SPACE, field_name);
     }
-    printf("[%s] %s : ", org, field_name);
 
     // Read and write the data from the field
     char buffer[1024];
@@ -279,9 +286,15 @@ void read_field(struct fds_drec_field *field, unsigned int indent, const fds_iem
 
     if(res >= 0){
         // Conversion was successful
-        printf("%s", buffer);
+        if (type == FDS_ET_STRING){
+            printf("\"%s\"", buffer);
+        }
+        else {
+            printf("%s", buffer);
+        }
+
         if (unit != "")
-            printf(" (%s)", unit);
+            printf(" %s", unit);
         printf("\n");
         return;
     }
