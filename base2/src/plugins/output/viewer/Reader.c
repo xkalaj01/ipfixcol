@@ -218,7 +218,7 @@ void read_field(struct fds_drec_field *field, unsigned int indent, const fds_iem
     enum fds_iemgr_element_type type;
     char *org;
     char *field_name;
-    char *unit;
+    const char *unit;
 
     // Get the organisation name, field name and unit of the data.
     if (field->info->def == NULL){
@@ -231,54 +231,7 @@ void read_field(struct fds_drec_field *field, unsigned int indent, const fds_iem
         type = field->info->def->data_type;
         org = field->info->def->scope->name;
         field_name = field->info->def->name;
-
-        switch(field->info->def->data_unit){
-        case FDS_EU_NONE :
-            unit = "";
-            break;
-        case FDS_EU_BITS :
-            unit = "bits";
-            break;
-        case FDS_EU_OCTETS :
-            unit = "octets";
-            break;
-        case FDS_EU_PACKETS :
-            unit = "packets";
-            break;
-        case FDS_EU_FLOWS:
-            unit = "flows";
-            break;
-        case FDS_EU_SECONDS :
-            unit = "seconds";
-            break;
-        case FDS_EU_MILLISECONDS :
-            unit = "milliseconds";
-            break;
-        case FDS_EU_MICROSECONDS :
-            unit = "microseconds";
-            break;
-        case FDS_EU_NANOSECONDS :
-            unit = "nanoseconds";
-            break;
-        case FDS_EU_4_OCTET_WORDS :
-            unit = "4 octet word";
-            break;
-        case FDS_EU_MESSAGES :
-            unit = "messages";
-            break;
-        case FDS_EU_HOPS :
-            unit = "hops";
-            break;
-        case FDS_EU_ENTRIES :
-            unit = "entries";
-            break;
-        case FDS_EU_FRAMES :
-            unit = "frames";
-            break;
-        default:
-            unit = "";
-            break;
-        }
+        unit = fds_iemgr_unit2str(field->info->def->data_unit);
     }
 
     switch(type){
